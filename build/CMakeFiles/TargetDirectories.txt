@@ -1,0 +1,3 @@
+/Users/fuzey/Documents/CODING/Chess/build/CMakeFiles/Chess.dir
+/Users/fuzey/Documents/CODING/Chess/build/CMakeFiles/edit_cache.dir
+/Users/fuzey/Documents/CODING/Chess/build/CMakeFiles/rebuild_cache.dir

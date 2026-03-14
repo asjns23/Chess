@@ -1,0 +1,8 @@
+[
+{
+  "directory": "/Users/fuzey/Documents/CODING/Chess/build",
+  "command": "/usr/bin/clang++ -DASSET_DIR=\\\"/Users/fuzey/Documents/CODING/Chess/assets\\\" -DPROJECT_ROOT=\\\"/Users/fuzey/Documents/CODING/Chess\\\" -DVERSION=\\\"1.0\\\" -I/Users/fuzey/Documents/CODING/Chess/include -isystem /opt/homebrew/include -g -std=gnu++20 -arch arm64 -o CMakeFiles/Chess.dir/src/main.cpp.o -c /Users/fuzey/Documents/CODING/Chess/src/main.cpp",
+  "file": "/Users/fuzey/Documents/CODING/Chess/src/main.cpp",
+  "output": "CMakeFiles/Chess.dir/src/main.cpp.o"
+}
+]
