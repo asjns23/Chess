@@ -10,7 +10,7 @@ file(GLOB_RECURSE SRC_FILES src/*.cpp)
 
 add_executable(Chess ${SRC_FILES})
 
-target_include_directories(Chess PRIVATE include)
+target_include_directories(Chess PRIVATE src)
 
 target_link_libraries(Chess
     PRIVATE
