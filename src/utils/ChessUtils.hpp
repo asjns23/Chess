@@ -1,6 +1,11 @@
 #pragma once
 
-#include <SFML/System/Vector2.hpp>
+#include <SFML/Graphics.hpp>
+#include <string_view>
 
+sf::Vector2i chessToBoard(int file, int rank);
 sf::Vector2i chessToBoard(char file, int rank);
-sf::Vector2f boardToPixel(sf::Vector2i boardPos, sf::Vector2f tileSize);
+sf::Vector2i chessToBoard(const char* square);
+sf::Vector2i chessToBoard(std::string_view square);
+
+sf::Vector2f boardToPixel(sf::Vector2i boardPos, float squareSize);

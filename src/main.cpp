@@ -1,7 +1,7 @@
 #include <SFML/Graphics.hpp>
 #include <filesystem>
 
-#include "config.hpp"
+#include "Config.hpp"
 #include "game/Game.hpp"
 
 
@@ -9,26 +9,26 @@ namespace fs = std::filesystem;
 
 int main()
 {
-    const fs::path assetPath = ASSET_DIR;
-
-    constexpr unsigned int windowWidth = 1280;
-    constexpr unsigned int windowHeight = 720;
-
+    // Window configuration
+    const unsigned int windowWidth  = Config::window.width;
+    const unsigned int windowHeight = Config::window.height;
     sf::RenderWindow window(
         sf::VideoMode({windowWidth, windowHeight}),
-        "Chess"
+        Config::window.title
     );
     window.setFramerateLimit(60);
 
-    Game game(assetPath);
+    // Game setup
+    Game game;
     if (!game.initialize())
     {
-        return 1;
+        return -1;
     }
 
+    // Main loop
     while (window.isOpen())
     {
-        while (const std::optional event = window.pollEvent())
+        while (auto event = window.pollEvent())
         {
             game.handleEvent(*event, window);
         }

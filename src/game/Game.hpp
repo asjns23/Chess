@@ -2,19 +2,17 @@
 
 #include <SFML/Graphics.hpp>
 #include <array>
-#include <filesystem>
 #include <memory>
 #include <vector>
 
+#include "board/Board.hpp"
 #include "pieces/ChessPiece.hpp"
-#include "pieces/Knight.hpp"
-
-namespace fs = std::filesystem;
+#include "utils/ChessUtils.hpp"
 
 class Game
 {
 public:
-    explicit Game(const fs::path& assetPath);
+    Game();
 
     bool initialize();
     void handleEvent(const sf::Event& event, sf::RenderWindow& window);
@@ -29,11 +27,20 @@ public:
         PieceT& ref = *piece;
 
         placePiece(ref, texture);
-
         m_pieces.push_back(std::move(piece));
 
         return ref;
     }
+
+    // overload for chess notation
+    template<typename PieceT>
+    PieceT& emplacePiece(Color color, char file, int rank)
+    {
+        return emplacePiece<PieceT>(color, chessToBoard(file, rank));
+    }
+
+    bool removePiece(sf::Vector2i square);
+    bool removePiece(char file, int rank); // overload for chess notation
 
     sf::Vector2f squareToPixel(sf::Vector2i square) const;
     void placePiece(ChessPiece& piece, const sf::Texture& texture);
@@ -48,25 +55,16 @@ private:
     void setupGame();
 
 private:
-    fs::path m_assetPath;
-
-    static constexpr unsigned int m_windowWidth = 1280;
-    static constexpr unsigned int m_windowHeight = 720;
-    static constexpr float m_boardPixelSize = 640.0f;
-    static constexpr float m_boardBorderPixels = 1.0f;
-
     sf::Texture m_backgroundTexture;
-    sf::Texture m_boardTexture;
+    sf::Texture m_boardSquaresTexture;
+    sf::Image m_boardSquaresImage;
     std::array<sf::Texture, 12> m_pieceTextures;
 
     sf::Sprite m_backgroundSprite;
-    sf::Sprite m_boardSprite;
 
+    std::unique_ptr<Board> m_board;
     std::vector<std::unique_ptr<ChessPiece>> m_pieces;
 
-    sf::Vector2f m_boardOrigin {};
-    float m_boardScaleX {};
-    float m_boardScaleY {};
-
-
+    sf::Color m_lightSquareColor {sf::Color::White};
+    sf::Color m_darkSquareColor {sf::Color::Black};
 };

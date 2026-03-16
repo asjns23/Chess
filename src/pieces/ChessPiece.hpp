@@ -40,3 +40,19 @@ protected:
     sf::Vector2i m_position;
     sf::Sprite m_sprite;
 };
+
+class Knight : public ChessPiece
+{
+public:
+    static constexpr PieceType type = PieceType::Knight;
+
+    Knight(Color c, sf::Vector2i pos, const sf::Texture& t);
+};
+
+class King : public ChessPiece
+{
+public:
+    static constexpr PieceType type = PieceType::King;
+
+    King(Color c, sf::Vector2i pos, const sf::Texture& t);
+};
