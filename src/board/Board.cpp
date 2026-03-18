@@ -34,6 +34,19 @@ Board::Board(sf::Vector2f origin,
     buildSprites();
 }
 
+bool Board::containsPixel(sf::Vector2i pixel) const
+{
+    const float left   = m_origin.x + m_border;
+    const float top    = m_origin.y + m_border;
+    const float right  = left + static_cast<float>(m_columns) * m_squareSize;
+    const float bottom = top + static_cast<float>(m_rows) * m_squareSize;
+
+    const float x = static_cast<float>(pixel.x);
+    const float y = static_cast<float>(pixel.y);
+
+    return x >= left && x < right && y >= top && y < bottom;
+}
+
 // Checks if the given square coordinates are within the bounds of the board
 bool Board::isInside(sf::Vector2i square) const
 {
@@ -53,9 +66,12 @@ sf::Vector2f Board::squareToPixel(sf::Vector2i square) const
 // Converts pixel coordinates (e.g., from mouse position) to square coordinates on the board
 sf::Vector2i Board::pixelToSquare(sf::Vector2i pixel) const
 {
+    const float x = static_cast<float>(pixel.x) - (m_origin.x + m_border);
+    const float y = static_cast<float>(pixel.y) - (m_origin.y + m_border);
+
     return {
-        static_cast<int>((static_cast<float>(pixel.x) - m_origin.x - m_border) / m_squareSize),
-        static_cast<int>((static_cast<float>(pixel.y) - m_origin.y - m_border) / m_squareSize)
+        static_cast<int>(x / m_squareSize),
+        static_cast<int>(y / m_squareSize)
     };
 }
 

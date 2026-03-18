@@ -8,9 +8,46 @@ ChessPiece::ChessPiece(Color c, PieceType type, sf::Vector2i pos, const sf::Text
 {
 }
 
+std::optional<MoveDir> ChessPiece::keyToDir(sf::Keyboard::Key key)
+{
+    switch (key)
+    {
+        case sf::Keyboard::Key::W:
+        case sf::Keyboard::Key::Up:    return MoveDir::Up;
+
+        case sf::Keyboard::Key::S:
+        case sf::Keyboard::Key::Down:  return MoveDir::Down;
+
+        case sf::Keyboard::Key::A:
+        case sf::Keyboard::Key::Left:  return MoveDir::Left;
+
+        case sf::Keyboard::Key::D:
+        case sf::Keyboard::Key::Right: return MoveDir::Right;
+
+        default:
+            return std::nullopt;
+    }
+}
+
+std::optional<sf::Vector2i> ChessPiece::handleDirectionalInput(sf::Keyboard::Key)
+{
+    return std::nullopt;
+}
+
+void ChessPiece::resetInputState()
+{
+    // default: nothing
+}
+
 void ChessPiece::move(sf::Vector2i newPos)
 {
     m_position = newPos;
+}
+
+bool ChessPiece::isValidMove(sf::Vector2i newPos) const
+{
+    // This function should be overridden to implement specific move logic for each piece type.
+    return false;
 }
 
 void ChessPiece::render(sf::RenderWindow& window) const

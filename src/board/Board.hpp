@@ -15,6 +15,7 @@ public:
           sf::Color darkColor);
 
     bool isInside(sf::Vector2i square) const;
+    bool containsPixel(sf::Vector2i pixel) const;
     sf::Vector2f squareToPixel(sf::Vector2i square) const;
     sf::Vector2i pixelToSquare(sf::Vector2i pixel) const;
 

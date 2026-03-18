@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <filesystem>
 #include <iostream>
 #include <utility>
@@ -32,6 +33,16 @@ namespace
 
         return {lightColor, darkColor};
     }
+
+    sf::Vector2f lerp(const sf::Vector2f& a, const sf::Vector2f& b, float t)
+    {
+        return a + (b - a) * t;
+    }
+
+    float smoothStep(float t)
+    {
+        return t * t * (3.0f - 2.0f * t);
+    }
 }
 
 Game::Game()
@@ -42,12 +53,15 @@ Game::Game()
       m_backgroundSprite(m_backgroundTexture),
       m_board(),
       m_pieces(),
+      m_player(nullptr),
+      m_bufferedInputQueue(),
+      m_moveAnimation(),
+      m_shakeAnimation(),
       m_lightSquareColor(sf::Color::White),
       m_darkSquareColor(sf::Color::Black)
 {
 }
 
-// Loads all necessary textures and sets up the game state. Returns true on success.
 bool Game::initialize()
 {
     const fs::path backgroundPath =
@@ -102,7 +116,6 @@ bool Game::loadPieceTextures()
         const char* filename;
     };
 
-    // Define PieceTypes and corresponding texture filenames for easy management
     static constexpr std::array<TextureSpec, 12> specs{{
         {Color::White, PieceType::King,   "white_king.png"},
         {Color::White, PieceType::Queen,  "white_queen.png"},
@@ -135,7 +148,6 @@ bool Game::loadPieceTextures()
     return true;
 }
 
-// Helper function to calculate the index in m_pieceTextures for a given color and piece type
 std::size_t Game::textureIndex(Color color, PieceType type)
 {
     const std::size_t colorOffset = (color == Color::White) ? 0u : 6u;
@@ -149,9 +161,168 @@ const sf::Texture& Game::pieceTexture(Color color, PieceType type) const
 
 void Game::handleEvent(const sf::Event& event, sf::RenderWindow& window)
 {
-    if (event.is<sf::Event::Closed>())
+    if (const auto* closed = event.getIf<sf::Event::Closed>())
     {
         window.close();
+        return;
+    }
+
+    if (!m_player)
+    {
+        return;
+    }
+
+    if (const auto* mousePressed = event.getIf<sf::Event::MouseButtonPressed>())
+    {
+        if (mousePressed->button != sf::Mouse::Button::Left)
+        {
+            return;
+        }
+
+        const sf::Vector2i mousePixel = mousePressed->position;
+        if (!m_board->containsPixel(mousePixel))
+        {
+            return;
+        }
+
+        const sf::Vector2i targetSquare = m_board->pixelToSquare(mousePixel);
+        m_player->resetInputState();
+
+        if (isAnimating())
+        {
+            m_bufferedInputQueue.clear();
+            m_bufferedClickTarget = targetSquare;
+            return;
+        }
+
+        if (!attemptPlayerMove(targetSquare))
+        {
+            beginInvalidMoveShake();
+        }
+
+        return;
+    }
+    constexpr std::size_t MaxInputQueueSize = 3;
+
+    if (const auto* keyPressed = event.getIf<sf::Event::KeyPressed>())
+    {
+        const auto dir = ChessPiece::keyToDir(keyPressed->code);
+        if (!dir.has_value())
+        {
+            return;
+        }
+
+        deleteStaleInputs();
+
+        if (m_bufferedInputQueue.size() >= MaxInputQueueSize)
+        {
+            m_bufferedInputQueue.pop_front(); // drop oldest input
+        }
+
+        m_bufferedInputQueue.push_back(QueuedInput{
+            .dir = *dir,
+            .timeSeconds = m_inputClock.getElapsedTime().asSeconds()
+        });
+
+        if (!isAnimating())
+        {
+            attemptNextQueueTarget();
+        }
+
+        return;
+    }
+}
+
+void Game::update(float dt)
+{
+    updatePlayerAnimation(dt);
+    updatePlayerShakeAnimation(dt);
+}
+
+void Game::updatePlayerAnimation(float dt)
+{
+    if (!m_moveAnimation.active || !m_player)
+    {
+        return;
+    }
+
+    m_moveAnimation.elapsed += dt;
+
+    float t = m_moveAnimation.elapsed / m_moveAnimation.duration;
+    if (t > 1.0f)
+    {
+        t = 1.0f;
+    }
+
+    const float eased = smoothStep(t);
+    const sf::Vector2f pixelPos =
+        lerp(m_moveAnimation.startPixel, m_moveAnimation.endPixel, eased);
+
+    m_player->setPixelPosition(pixelPos);
+
+    if (t >= 1.0f)
+    {
+        m_player->move(m_moveAnimation.targetSquare);
+        m_player->setPixelPosition(m_moveAnimation.endPixel);
+        m_moveAnimation.active = false;
+
+        attemptNextQueueTarget();
+    }
+}
+
+void Game::updatePlayerShakeAnimation(float dt)
+{
+    if (!m_shakeAnimation.active || !m_player)
+    {
+        return;
+    }
+
+    m_shakeAnimation.elapsed += dt;
+
+    float t = m_shakeAnimation.elapsed / m_shakeAnimation.duration;
+    if (t > 1.0f)
+    {
+        t = 1.0f;
+    }
+
+    const float fade = 1.0f - t;
+    const float wave = std::sin(t * 20.0f * 3.14159265f);
+    const float offsetX = wave * m_shakeAnimation.amplitude * fade;
+
+    m_player->setPixelPosition({
+        m_shakeAnimation.basePixel.x + offsetX,
+        m_shakeAnimation.basePixel.y
+    });
+
+    if (t >= 1.0f)
+    {
+        m_player->setPixelPosition(m_shakeAnimation.basePixel);
+        m_shakeAnimation.active = false;
+    }
+}
+
+std::optional<MoveDir> Game::keyToMoveDir(sf::Keyboard::Key key)
+{
+    switch (key)
+    {
+        case sf::Keyboard::Key::W:
+        case sf::Keyboard::Key::Up:
+            return MoveDir::Up;
+
+        case sf::Keyboard::Key::S:
+        case sf::Keyboard::Key::Down:
+            return MoveDir::Down;
+
+        case sf::Keyboard::Key::A:
+        case sf::Keyboard::Key::Left:
+            return MoveDir::Left;
+
+        case sf::Keyboard::Key::D:
+        case sf::Keyboard::Key::Right:
+            return MoveDir::Right;
+
+        default:
+            return std::nullopt;
     }
 }
 
@@ -170,28 +341,31 @@ void Game::render(sf::RenderWindow& window) const
     }
 }
 
-// Converts a board square (file, rank) to pixel coordinates for rendering
+void Game::setPlayer(ChessPiece& piece)
+{
+    m_player = &piece;
+    m_player->setPixelPosition(piecePixelPosition(*m_player, m_player->getPosition()));
+}
+
+ChessPiece* Game::getPlayer() const
+{
+    return m_player;
+}
+
 sf::Vector2f Game::squareToPixel(sf::Vector2i square) const
 {
     return m_board->squareToPixel(square);
 }
 
-// Places a piece on the board and sets its pixel position based on its square position
-void Game::placePiece(ChessPiece& piece, const sf::Texture& texture)
+sf::Vector2f Game::piecePixelPosition(const ChessPiece& piece, sf::Vector2i square) const
 {
-    const sf::Vector2f squareTopLeft = squareToPixel(piece.getPosition());
+    const sf::Vector2f squareTopLeft = squareToPixel(square);
+    const sf::Texture& texture = pieceTexture(piece.getColor(), piece.getType());
     const sf::Vector2u texSize = texture.getSize();
 
-    // Reference board square size from the original art
     constexpr float baseSquareSize = 22.0f;
-
-    // Current board square size from config
     const float squareSize = Config::board.squareSize;
-
-    // Uniform board scale derived from how much the board grew/shrank
     const float boardScale = squareSize / baseSquareSize;
-
-    piece.setScale({boardScale, boardScale});
 
     const float drawnWidth = static_cast<float>(texSize.x) * boardScale;
     const float drawnHeight = static_cast<float>(texSize.y) * boardScale;
@@ -199,13 +373,22 @@ void Game::placePiece(ChessPiece& piece, const sf::Texture& texture)
     const float offsetX = (squareSize - drawnWidth) * 0.5f;
     const float offsetY = (squareSize - drawnHeight) * 0.5f;
 
-    piece.setPixelPosition({
+    return {
         squareTopLeft.x + offsetX,
         squareTopLeft.y + offsetY
-    });
+    };
 }
 
-// Removes a piece from the board at the given square. Returns false if no piece was found at that square.
+void Game::placePiece(ChessPiece& piece, const sf::Texture& texture)
+{
+    constexpr float baseSquareSize = 22.0f;
+    const float squareSize = Config::board.squareSize;
+    const float boardScale = squareSize / baseSquareSize;
+
+    piece.setScale({boardScale, boardScale});
+    piece.setPixelPosition(piecePixelPosition(piece, piece.getPosition()));
+}
+
 bool Game::removePiece(sf::Vector2i square)
 {
     const auto it = std::find_if(
@@ -221,17 +404,122 @@ bool Game::removePiece(sf::Vector2i square)
         return false;
     }
 
+    if (it->get() == m_player)
+    {
+        m_player = nullptr;
+        m_moveAnimation.active = false;
+        m_shakeAnimation.active = false;
+    }
+
     m_pieces.erase(it);
     return true;
 }
 
-// Overload for chess notation
 bool Game::removePiece(char file, int rank)
 {
     return removePiece(chessToBoard(file, rank));
 }
 
-// Sets up the background sprite to cover the entire window
+bool Game::attemptPlayerMove(sf::Vector2i targetSquare)
+{
+    if (!m_player)
+    {
+        return false;
+    }
+
+    if (!m_board->isInside(targetSquare))
+    {
+        beginInvalidMoveShake();
+        return false;
+    }
+
+    if (!m_player->isValidMove(targetSquare))
+    {
+        beginInvalidMoveShake();
+        return false;
+    }
+
+    beginPlayerMoveAnimation(targetSquare);
+    return true;
+}
+
+void Game::deleteStaleInputs()
+{
+    constexpr float maxAgeSeconds = 0.12f;
+    const float now = m_inputClock.getElapsedTime().asSeconds();
+
+    while (!m_bufferedInputQueue.empty())
+    {
+        const float age = now - m_bufferedInputQueue.front().timeSeconds;
+        if (age <= maxAgeSeconds)
+        {
+            break;
+        }
+
+        m_bufferedInputQueue.pop_front();
+    }
+}
+
+void Game::attemptNextQueueTarget()
+{
+    if (!m_player || isAnimating())
+    {
+        return;
+    }
+
+    deleteStaleInputs();
+
+    if (m_bufferedInputQueue.empty())
+    {
+        return;
+    }
+
+    const auto target = m_player->nextMove(m_bufferedInputQueue);
+    if (!target.has_value())
+    {
+        return;
+    }
+
+    if (!attemptPlayerMove(*target))
+    {
+        beginInvalidMoveShake();
+    }
+}
+
+void Game::beginPlayerMoveAnimation(sf::Vector2i targetSquare)
+{
+    if (!m_player)
+    {
+        return;
+    }
+
+    m_moveAnimation.active = true;
+    m_moveAnimation.elapsed = 0.0f;
+    m_moveAnimation.targetSquare = targetSquare;
+    m_moveAnimation.startPixel =
+        piecePixelPosition(*m_player, m_player->getPosition());
+    m_moveAnimation.endPixel =
+        piecePixelPosition(*m_player, targetSquare);
+}
+
+void Game::beginInvalidMoveShake()
+{
+    if (!m_player)
+    {
+        return;
+    }
+
+    m_shakeAnimation.active = true;
+    m_shakeAnimation.elapsed = 0.0f;
+    m_shakeAnimation.basePixel =
+        piecePixelPosition(*m_player, m_player->getPosition());
+}
+
+bool Game::isAnimating() const
+{
+    return m_moveAnimation.active || m_shakeAnimation.active;
+}
+
 void Game::setupBackground()
 {
     const sf::Vector2u bgSize = m_backgroundTexture.getSize();
@@ -242,7 +530,6 @@ void Game::setupBackground()
     });
 }
 
-// Sets up the board by calculating its pixel position and creating a Board object
 void Game::setupBoard()
 {
     const float boardWidth =

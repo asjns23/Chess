@@ -33,7 +33,7 @@ namespace Config
     {
         int columns = 4;
         int rows = 4;
-        float squareSize = 64.0f;
+        float squareSize = 88.0f;
         float border = 4.0f;
     };
 

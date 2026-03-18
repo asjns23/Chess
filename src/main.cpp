@@ -25,13 +25,21 @@ int main()
         return -1;
     }
 
+
+    sf::Clock clock;
+
     // Main loop
     while (window.isOpen())
     {
+        const float dt = clock.restart().asSeconds();
+
         while (auto event = window.pollEvent())
         {
             game.handleEvent(*event, window);
         }
+
+        // Update game state with a real delta timestep
+        game.update(dt);
 
         window.clear();
         game.render(window);
