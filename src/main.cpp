@@ -17,6 +17,7 @@ int main()
         Config::window.title
     );
     window.setFramerateLimit(60);
+    window.setKeyRepeatEnabled(false);
 
     // Game setup
     Game game;

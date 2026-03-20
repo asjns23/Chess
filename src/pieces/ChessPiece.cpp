@@ -29,11 +29,6 @@ std::optional<MoveDir> ChessPiece::keyToDir(sf::Keyboard::Key key)
     }
 }
 
-std::optional<sf::Vector2i> ChessPiece::handleDirectionalInput(sf::Keyboard::Key)
-{
-    return std::nullopt;
-}
-
 void ChessPiece::resetInputState()
 {
     // default: nothing
@@ -46,7 +41,6 @@ void ChessPiece::move(sf::Vector2i newPos)
 
 bool ChessPiece::isValidMove(sf::Vector2i newPos) const
 {
-    // This function should be overridden to implement specific move logic for each piece type.
     return false;
 }
 

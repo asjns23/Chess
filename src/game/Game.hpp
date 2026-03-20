@@ -3,9 +3,10 @@
 #include <SFML/Graphics.hpp>
 #include <SFML/System/Clock.hpp>
 #include <array>
-#include <memory>
-#include <vector>
 #include <deque>
+#include <memory>
+#include <optional>
+#include <vector>
 
 #include "board/Board.hpp"
 #include "pieces/ChessPiece.hpp"
@@ -39,7 +40,6 @@ public:
         return ref;
     }
 
-    // overload for chess notation
     template<typename PieceT>
     PieceT& emplacePiece(Color color, char file, int rank)
     {
@@ -47,17 +47,30 @@ public:
     }
 
     bool removePiece(sf::Vector2i square);
-    bool removePiece(char file, int rank); // overload for chess notation
+    bool removePiece(char file, int rank);
 
-    void deleteStaleInputs();
-    bool attemptPlayerMove(sf::Vector2i offset);
-    void attemptNextQueueTarget();
+    void pruneOldInputs();
+    bool attemptPlayerMove(sf::Vector2i targetSquare);
+    void processPlayerInput();
     void beginPlayerMoveAnimation(sf::Vector2i targetSquare);
 
     sf::Vector2f squareToPixel(sf::Vector2i square) const;
     void placePiece(ChessPiece& piece, const sf::Texture& texture);
 
 private:
+    enum class InputAction
+    {
+        Press,
+        Release
+    };
+
+    struct DirectionInput
+    {
+        MoveDir dir {};
+        InputAction action = InputAction::Press;
+        float timeSeconds = 0.0f;
+    };
+
     struct MoveAnimation
     {
         bool active = false;
@@ -69,7 +82,7 @@ private:
     };
 
     struct ShakeAnimation
-        {  
+    {
         bool active = false;
         sf::Vector2f basePixel {};
         float duration = 0.22f;
@@ -77,15 +90,18 @@ private:
         float amplitude = 6.0f;
     };
 
-    // Helpers:
     sf::Vector2f piecePixelPosition(const ChessPiece& piece, sf::Vector2i square) const;
     static std::optional<MoveDir> keyToMoveDir(sf::Keyboard::Key key);
     static std::size_t textureIndex(Color color, PieceType type);
+    static std::size_t moveDirIndex(MoveDir dir);
+
     void beginInvalidMoveShake();
     void updatePlayerShakeAnimation(float dt);
     bool isAnimating() const;
 
-    // Methods
+    void recordDirectionalInput(MoveDir dir, InputAction action);
+    void clearInputState();
+
     bool loadPieceTextures();
     const sf::Texture& pieceTexture(Color color, PieceType type) const;
 
@@ -93,7 +109,6 @@ private:
     void setupBoard();
     void setupGame();
 
-    // Members
     sf::Texture m_backgroundTexture;
     sf::Sprite m_backgroundSprite;
     sf::Texture m_boardSquaresTexture;
@@ -105,7 +120,10 @@ private:
     std::vector<std::unique_ptr<ChessPiece>> m_pieces;
     ChessPiece* m_player = nullptr;
 
-    std::deque<QueuedInput> m_bufferedInputQueue;
+    std::deque<DirectionInput> m_inputHistory;
+    std::deque<QueuedInput> m_pressQueue;
+    std::array<bool, 4> m_heldDirections {false, false, false, false};
+
     std::optional<sf::Vector2i> m_bufferedClickTarget;
     MoveAnimation m_moveAnimation;
     ShakeAnimation m_shakeAnimation;

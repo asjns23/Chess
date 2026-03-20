@@ -18,7 +18,7 @@ bool Knight::isValidMove(sf::Vector2i newPos) const
 
 std::optional<sf::Vector2i> Knight::nextMove(std::deque<QueuedInput>& queue) const
 {
-    constexpr float chordWindow = 0.08f;
+    constexpr float sequenceWindow = 0.20f;
 
     if (queue.size() < 2)
     {
@@ -28,10 +28,8 @@ std::optional<sf::Vector2i> Knight::nextMove(std::deque<QueuedInput>& queue) con
     const QueuedInput first = queue[0];
     const QueuedInput second = queue[1];
 
-    const bool closeEnough =
-        (second.timeSeconds - first.timeSeconds) <= chordWindow;
-
-    if (!closeEnough)
+    const float dt = second.timeSeconds - first.timeSeconds;
+    if (dt > sequenceWindow)
     {
         queue.pop_front();
         return std::nullopt;
@@ -43,6 +41,7 @@ std::optional<sf::Vector2i> Knight::nextMove(std::deque<QueuedInput>& queue) con
     const bool secondHorizontal =
         second.dir == MoveDir::Left || second.dir == MoveDir::Right;
 
+    // Knight sequenced input must be one horizontal and one vertical input.
     if (firstHorizontal == secondHorizontal)
     {
         queue.pop_front();
@@ -66,67 +65,9 @@ std::optional<sf::Vector2i> Knight::nextMove(std::deque<QueuedInput>& queue) con
         }
     };
 
+    // First input = long leg, second input = short leg.
     applyLeg(first.dir, 2, dx, dy);
     applyLeg(second.dir, 1, dx, dy);
 
     return m_position + sf::Vector2i{dx, dy};
-}
-
-std::optional<sf::Vector2i> Knight::handleDirectionalInput(sf::Keyboard::Key key)
-{
-    const auto dir = ChessPiece::keyToDir(key);
-    if (!dir.has_value())
-    {
-        return std::nullopt;
-    }
-
-    const auto offset = pushKnightInput(*dir);
-    if (!offset.has_value())
-    {
-        return std::nullopt;
-    }
-
-    return m_position + *offset;
-}
-
-std::optional<sf::Vector2i> Knight::pushKnightInput(MoveDir dir)
-{
-    if (!m_firstMoveInput.has_value())
-    {
-        m_firstMoveInput = dir;
-        return std::nullopt;
-    }
-
-    const MoveDir first = *m_firstMoveInput;
-    m_firstMoveInput.reset();
-
-    switch (first)
-    {
-        case MoveDir::Up:
-            if (dir == MoveDir::Left)  return sf::Vector2i{-1, -2};
-            if (dir == MoveDir::Right) return sf::Vector2i{ 1, -2};
-            break;
-
-        case MoveDir::Down:
-            if (dir == MoveDir::Left)  return sf::Vector2i{-1,  2};
-            if (dir == MoveDir::Right) return sf::Vector2i{ 1,  2};
-            break;
-
-        case MoveDir::Left:
-            if (dir == MoveDir::Up)    return sf::Vector2i{-2, -1};
-            if (dir == MoveDir::Down)  return sf::Vector2i{-2,  1};
-            break;
-
-        case MoveDir::Right:
-            if (dir == MoveDir::Up)    return sf::Vector2i{ 2, -1};
-            if (dir == MoveDir::Down)  return sf::Vector2i{ 2,  1};
-            break;
-    }
-
-    return std::nullopt;
-}
-
-void Knight::resetInputState()
-{
-    m_firstMoveInput.reset();
 }

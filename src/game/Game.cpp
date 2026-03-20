@@ -54,7 +54,9 @@ Game::Game()
       m_board(),
       m_pieces(),
       m_player(nullptr),
-      m_bufferedInputQueue(),
+      m_inputHistory(),
+      m_pressQueue(),
+      m_heldDirections{false, false, false, false},
       m_moveAnimation(),
       m_shakeAnimation(),
       m_lightSquareColor(sf::Color::White),
@@ -154,6 +156,19 @@ std::size_t Game::textureIndex(Color color, PieceType type)
     return colorOffset + static_cast<std::size_t>(type);
 }
 
+std::size_t Game::moveDirIndex(MoveDir dir)
+{
+    switch (dir)
+    {
+        case MoveDir::Up:    return 0u;
+        case MoveDir::Down:  return 1u;
+        case MoveDir::Left:  return 2u;
+        case MoveDir::Right: return 3u;
+    }
+
+    return 0u;
+}
+
 const sf::Texture& Game::pieceTexture(Color color, PieceType type) const
 {
     return m_pieceTextures[textureIndex(color, type)];
@@ -186,11 +201,12 @@ void Game::handleEvent(const sf::Event& event, sf::RenderWindow& window)
         }
 
         const sf::Vector2i targetSquare = m_board->pixelToSquare(mousePixel);
+
+        clearInputState();
         m_player->resetInputState();
 
         if (isAnimating())
         {
-            m_bufferedInputQueue.clear();
             m_bufferedClickTarget = targetSquare;
             return;
         }
@@ -202,31 +218,38 @@ void Game::handleEvent(const sf::Event& event, sf::RenderWindow& window)
 
         return;
     }
-    constexpr std::size_t MaxInputQueueSize = 3;
 
     if (const auto* keyPressed = event.getIf<sf::Event::KeyPressed>())
     {
-        const auto dir = ChessPiece::keyToDir(keyPressed->code);
+        const auto dir = keyToMoveDir(keyPressed->code);
         if (!dir.has_value())
         {
             return;
         }
 
-        deleteStaleInputs();
-
-        if (m_bufferedInputQueue.size() >= MaxInputQueueSize)
+        const std::size_t index = moveDirIndex(*dir);
+        if (m_heldDirections[index])
         {
-            m_bufferedInputQueue.pop_front(); // drop oldest input
+            return;
         }
 
-        m_bufferedInputQueue.push_back(QueuedInput{
-            .dir = *dir,
-            .timeSeconds = m_inputClock.getElapsedTime().asSeconds()
-        });
+        recordDirectionalInput(*dir, InputAction::Press);
+        return;
+    }
+
+    if (const auto* keyReleased = event.getIf<sf::Event::KeyReleased>())
+    {
+        const auto dir = keyToMoveDir(keyReleased->code);
+        if (!dir.has_value())
+        {
+            return;
+        }
+
+        recordDirectionalInput(*dir, InputAction::Release);
 
         if (!isAnimating())
         {
-            attemptNextQueueTarget();
+            processPlayerInput();
         }
 
         return;
@@ -237,6 +260,11 @@ void Game::update(float dt)
 {
     updatePlayerAnimation(dt);
     updatePlayerShakeAnimation(dt);
+
+    if (!isAnimating())
+    {
+        processPlayerInput();
+    }
 }
 
 void Game::updatePlayerAnimation(float dt)
@@ -266,7 +294,7 @@ void Game::updatePlayerAnimation(float dt)
         m_player->setPixelPosition(m_moveAnimation.endPixel);
         m_moveAnimation.active = false;
 
-        attemptNextQueueTarget();
+        processPlayerInput();
     }
 }
 
@@ -326,6 +354,49 @@ std::optional<MoveDir> Game::keyToMoveDir(sf::Keyboard::Key key)
     }
 }
 
+void Game::recordDirectionalInput(MoveDir dir, InputAction action)
+{
+    constexpr std::size_t MaxInputHistorySize = 16;
+    constexpr std::size_t MaxPressQueueSize = 8;
+
+    pruneOldInputs();
+
+    const float now = m_inputClock.getElapsedTime().asSeconds();
+
+    if (m_inputHistory.size() >= MaxInputHistorySize)
+    {
+        m_inputHistory.pop_front();
+    }
+
+    m_inputHistory.push_back(DirectionInput{
+        .dir = dir,
+        .action = action,
+        .timeSeconds = now
+    });
+
+    m_heldDirections[moveDirIndex(dir)] = (action == InputAction::Press);
+
+    if (action == InputAction::Press)
+    {
+        if (m_pressQueue.size() >= MaxPressQueueSize)
+        {
+            m_pressQueue.pop_front();
+        }
+
+        m_pressQueue.push_back(QueuedInput{
+            .dir = dir,
+            .timeSeconds = now
+        });
+    }
+}
+
+void Game::clearInputState()
+{
+    m_inputHistory.clear();
+    m_pressQueue.clear();
+    m_heldDirections = {false, false, false, false};
+}
+
 void Game::render(sf::RenderWindow& window) const
 {
     window.draw(m_backgroundSprite);
@@ -379,7 +450,7 @@ sf::Vector2f Game::piecePixelPosition(const ChessPiece& piece, sf::Vector2i squa
     };
 }
 
-void Game::placePiece(ChessPiece& piece, const sf::Texture& texture)
+void Game::placePiece(ChessPiece& piece, const sf::Texture&)
 {
     constexpr float baseSquareSize = 22.0f;
     const float squareSize = Config::board.squareSize;
@@ -409,6 +480,7 @@ bool Game::removePiece(sf::Vector2i square)
         m_player = nullptr;
         m_moveAnimation.active = false;
         m_shakeAnimation.active = false;
+        clearInputState();
     }
 
     m_pieces.erase(it);
@@ -429,13 +501,11 @@ bool Game::attemptPlayerMove(sf::Vector2i targetSquare)
 
     if (!m_board->isInside(targetSquare))
     {
-        beginInvalidMoveShake();
         return false;
     }
 
     if (!m_player->isValidMove(targetSquare))
     {
-        beginInvalidMoveShake();
         return false;
     }
 
@@ -443,46 +513,90 @@ bool Game::attemptPlayerMove(sf::Vector2i targetSquare)
     return true;
 }
 
-void Game::deleteStaleInputs()
+void Game::pruneOldInputs()
 {
-    constexpr float maxAgeSeconds = 0.12f;
+    constexpr float maxAgeSeconds = 0.35f;
     const float now = m_inputClock.getElapsedTime().asSeconds();
 
-    while (!m_bufferedInputQueue.empty())
+    while (!m_inputHistory.empty())
     {
-        const float age = now - m_bufferedInputQueue.front().timeSeconds;
+        const float age = now - m_inputHistory.front().timeSeconds;
         if (age <= maxAgeSeconds)
         {
             break;
         }
 
-        m_bufferedInputQueue.pop_front();
+        m_inputHistory.pop_front();
+    }
+
+    while (!m_pressQueue.empty())
+    {
+        const float age = now - m_pressQueue.front().timeSeconds;
+        if (age <= maxAgeSeconds)
+        {
+            break;
+        }
+
+        m_pressQueue.pop_front();
     }
 }
 
-void Game::attemptNextQueueTarget()
+void Game::processPlayerInput()
 {
     if (!m_player || isAnimating())
     {
         return;
     }
 
-    deleteStaleInputs();
+    pruneOldInputs();
 
-    if (m_bufferedInputQueue.empty())
+    if (m_bufferedClickTarget.has_value())
+    {
+        const sf::Vector2i targetSquare = *m_bufferedClickTarget;
+        m_bufferedClickTarget.reset();
+
+        if (!attemptPlayerMove(targetSquare))
+        {
+            beginInvalidMoveShake();
+        }
+
+        return;
+    }
+
+    if (m_pressQueue.empty())
     {
         return;
     }
 
-    const auto target = m_player->nextMove(m_bufferedInputQueue);
-    if (!target.has_value())
+    const float now = m_inputClock.getElapsedTime().asSeconds();
+    const float newestAge = now - m_pressQueue.back().timeSeconds;
+    constexpr float inputSettleDelay = 0.09f;
+
+    if (newestAge < inputSettleDelay)
     {
         return;
     }
 
-    if (!attemptPlayerMove(*target))
+    while (!m_pressQueue.empty() && !isAnimating())
     {
-        beginInvalidMoveShake();
+        const std::size_t sizeBefore = m_pressQueue.size();
+
+        const auto target = m_player->nextMove(m_pressQueue);
+        if (!target.has_value())
+        {
+            if (m_pressQueue.size() == sizeBefore)
+            {
+                break;
+            }
+
+            continue;
+        }
+
+        if (!attemptPlayerMove(*target))
+        {
+            beginInvalidMoveShake();
+            break;
+        }
     }
 }
 
@@ -557,4 +671,5 @@ void Game::setupBoard()
 void Game::setupGame()
 {
     GameSetup::knightTest(*this);
+    // GameSetup::kingTest(*this);
 }

@@ -31,8 +31,8 @@ namespace Config
 
     struct Board
     {
-        int columns = 4;
-        int rows = 4;
+        int columns = 6;
+        int rows = 6;
         float squareSize = 88.0f;
         float border = 4.0f;
     };

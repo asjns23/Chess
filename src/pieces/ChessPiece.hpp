@@ -2,6 +2,7 @@
 
 #include <SFML/Graphics.hpp>
 #include <deque>
+#include <optional>
 
 enum class Color
 {
@@ -39,7 +40,6 @@ public:
     ChessPiece(Color c, PieceType type, sf::Vector2i pos, const sf::Texture& t);
     virtual ~ChessPiece() = default;
 
-    virtual std::optional<sf::Vector2i> handleDirectionalInput(sf::Keyboard::Key key);
     virtual void resetInputState();
 
     virtual void move(sf::Vector2i newPos);
@@ -71,16 +71,7 @@ public:
     Knight(Color c, sf::Vector2i pos, const sf::Texture& t);
 
     bool isValidMove(sf::Vector2i newPos) const override;
-
     std::optional<sf::Vector2i> nextMove(std::deque<QueuedInput>& queue) const override;
-    std::optional<sf::Vector2i> handleDirectionalInput(sf::Keyboard::Key key) override;
-    void resetInputState() override;
-
-private:
-
-    std::optional<MoveDir> m_firstMoveInput;
-
-    std::optional<sf::Vector2i> pushKnightInput(MoveDir dir);
 };
 
 class King final : public ChessPiece
@@ -91,7 +82,5 @@ public:
     King(Color c, sf::Vector2i pos, const sf::Texture& t);
 
     bool isValidMove(sf::Vector2i newPos) const override;
-
     std::optional<sf::Vector2i> nextMove(std::deque<QueuedInput>& queue) const override;
-    std::optional<sf::Vector2i> handleDirectionalInput(sf::Keyboard::Key key) override;
 };
