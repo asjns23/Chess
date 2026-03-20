@@ -194,13 +194,20 @@ void Game::handleEvent(const sf::Event& event, sf::RenderWindow& window)
             return;
         }
 
-        const sf::Vector2i mousePixel = mousePressed->position;
-        if (!m_board->containsPixel(mousePixel))
+        const sf::Vector2f mouseCoords =
+            window.mapPixelToCoords(mousePressed->position);
+
+        const sf::Vector2i mousePoint{
+            static_cast<int>(std::lround(mouseCoords.x)),
+            static_cast<int>(std::lround(mouseCoords.y))
+        };
+
+        if (!m_board->containsPixel(mousePoint))
         {
             return;
         }
 
-        const sf::Vector2i targetSquare = m_board->pixelToSquare(mousePixel);
+        const sf::Vector2i targetSquare = m_board->pixelToSquare(mousePoint);
 
         clearInputState();
         m_player->resetInputState();
